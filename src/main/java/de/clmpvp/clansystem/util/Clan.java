@@ -7,17 +7,16 @@ import java.util.List;
 import java.util.UUID;
 
 public class Clan {
-    private final String name;
+    private String name;
     private final String abkürzung;
-    private final List<String> members;
+    private List<String> members;
     public String ownerUUID;
     private Location base;
 
-    public Clan(String name, String abkürzung, UUID ownerUUID) {
-        this.name = name;
+    public Clan(String clanName, String abkürzung, String ownerUUID) {
+        this.ownerUUID = ownerUUID;
         this.abkürzung = abkürzung;
-        this.members = new ArrayList<>();
-        this.ownerUUID = String.valueOf(ownerUUID);
+        this.name = clanName;
 
     }
 

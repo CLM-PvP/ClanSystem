@@ -4,12 +4,18 @@ import de.clmpvp.clansystem.ClanSystem;
 import de.clmpvp.clansystem.util.Clan;
 import de.clmpvp.clansystem.util.ClanCreationHandler;
 import de.clmpvp.clansystem.util.ClanManager;
+import net.md_5.bungee.api.chat.ClickEvent;
+import net.md_5.bungee.api.chat.ComponentBuilder;
+import net.md_5.bungee.api.chat.TextComponent;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 public class ClanCommand implements CommandExecutor {
@@ -17,6 +23,7 @@ public class ClanCommand implements CommandExecutor {
     private final ClanManager clanManager;
     private final ClanCreationHandler clanCreationHandler;
     private final boolean isSetBaseEnabled;
+    private final Map<UUID, UUID> pendingInvites = new HashMap<>();
 
     public ClanCommand(ClanSystem plugin) {
         this.clanManager = plugin.getClanManager();
@@ -39,11 +46,11 @@ public class ClanCommand implements CommandExecutor {
             player.sendMessage(ClanSystem.prefix + "/clan delete <name> - Lösche einen Clan");
             player.sendMessage(ClanSystem.prefix + "/clan invite <player> - Lade einen Spieler in den Clan ein");
             player.sendMessage(ClanSystem.prefix + "/clan accept - Akzeptiere eine Clan-Einladung");
-
             if (isSetBaseEnabled) {
                 player.sendMessage(ClanSystem.prefix + "/clan setbase - Setze die Basis des Clans an deine aktuelle Position");
                 player.sendMessage(ClanSystem.prefix + "/clan home - Teleportiere dich zur Clan-Basis");
             }
+            player.sendMessage(ClanSystem.prefix + "/clan info - Sehe Infos über deinen Clan");
 
             return true;
         }
@@ -77,7 +84,7 @@ public class ClanCommand implements CommandExecutor {
 
             if (args.length == 2 && args[0].equalsIgnoreCase("invite")) {
                 String playerName = args[1];
-                Player invitedPlayer = org.bukkit.Bukkit.getPlayer(playerName);
+                Player invitedPlayer = Bukkit.getPlayer(playerName);
 
                 if (invitedPlayer == null) {
                     player.sendMessage(ClanSystem.prefix + "Der Spieler '" + playerName + "' ist nicht online.");
@@ -99,7 +106,23 @@ public class ClanCommand implements CommandExecutor {
 
                 if (clanManager.invitePlayerToClan(playerClan, invitedPlayer.getUniqueId())) {
                     player.sendMessage(ClanSystem.prefix + "Du hast '" + playerName + "' in deinen Clan eingeladen.");
-                    invitedPlayer.sendMessage(ClanSystem.prefix + "Du wurdest in den Clan '" + playerClan + "' eingeladen. Akzeptiere mit /clan accept.");
+
+                    // Erstelle die Nachricht mit den Accept- und Deny-Buttons
+                    TextComponent message = new TextComponent(ClanSystem.prefix + "Du wurdest in den Clan '" + playerClan + "' eingeladen. ");
+
+                    TextComponent acceptButton = new TextComponent("[accept]");
+                    acceptButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/clan accept"));
+                    acceptButton.setColor(net.md_5.bungee.api.ChatColor.GREEN);
+                    message.addExtra(acceptButton);
+
+                    message.addExtra(" ");
+
+                    TextComponent denyButton = new TextComponent("[deny]");
+                    denyButton.setClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/clan deny"));
+                    denyButton.setColor(net.md_5.bungee.api.ChatColor.RED);
+                    message.addExtra(denyButton);
+
+                    invitedPlayer.spigot().sendMessage(message);
                 } else {
                     player.sendMessage(ClanSystem.prefix + "Fehler beim Einladen des Spielers.");
                 }
@@ -109,6 +132,25 @@ public class ClanCommand implements CommandExecutor {
             if (args.length == 1 && args[0].equalsIgnoreCase("accept")) {
                 if (clanManager.acceptInvite(player.getUniqueId(), player.getName())) {
                     player.sendMessage(ClanSystem.prefix + "Du bist dem Clan beigetreten!");
+                    // Nachricht an den einladenden Spieler
+                    Player inviter = Bukkit.getPlayer(getInviter(player.getUniqueId()));
+                    if (inviter != null) {
+                        inviter.sendMessage(ClanSystem.prefix + player.getName() + " hat die Einladung angenommen und ist dem Clan beigetreten.");
+                    }
+                } else {
+                    player.sendMessage(ClanSystem.prefix + "Du hast keine ausstehende Clan-Einladung.");
+                }
+                return true;
+            }
+
+            if (args.length == 1 && args[0].equalsIgnoreCase("deny")) {
+                if (denyInvite(player.getUniqueId())) {
+                    player.sendMessage(ClanSystem.prefix + "Du hast die Clan-Einladung abgelehnt.");
+                    // Nachricht an den einladenden Spieler
+                    Player inviter = Bukkit.getPlayer(getInviter(player.getUniqueId()));
+                    if (inviter != null) {
+                        inviter.sendMessage(ClanSystem.prefix + player.getName() + " hat die Einladung abgelehnt.");
+                    }
                 } else {
                     player.sendMessage(ClanSystem.prefix + "Du hast keine ausstehende Clan-Einladung.");
                 }
@@ -161,9 +203,36 @@ public class ClanCommand implements CommandExecutor {
                 }
                 return true;
             }
+            if (args.length == 1 && args[0].equalsIgnoreCase("info")) {
+                Clan playerClan = clanManager.getClanOfPlayer(player.getName());
+
+                if (playerClan == null) {
+                    player.sendMessage(ClanSystem.prefix + "Du bist in keinem Clan.");
+                    return true;
+                }
+
+                // Clan-Informationen anzeigen
+                player.sendMessage(ClanSystem.prefix + "Clan: " + playerClan.getName());
+                player.sendMessage(ClanSystem.prefix + "Kürzung: " + playerClan.getAbkürzung());
+                player.sendMessage(ClanSystem.prefix + "Member: " + playerClan.getMembers());
+
+                for (String member : playerClan.getMembers()) {
+                    player.sendMessage(ClanSystem.prefix + " - " + member);
+                }
+
+                return true;
+            }
 
             return false;
         }
         return false;
+    }
+
+    public boolean denyInvite(UUID playerUUID) {
+        return pendingInvites.remove(playerUUID) != null;
+    }
+
+    public UUID getInviter(UUID playerUUID) {
+        return pendingInvites.get(playerUUID);
     }
 }

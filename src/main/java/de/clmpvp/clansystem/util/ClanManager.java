@@ -19,11 +19,13 @@ public class ClanManager {
     private final Map<UUID, String> pendingInvites = new HashMap<>();
     private final File file;
     private final FileConfiguration config;
-    private String ownerUUID;
+    public String ownerUUID;
+    private final Map<String, Clan> clansinfo = new HashMap<>();
 
     public ClanManager(ClanSystem plugin, String ownerUUID) {
         this.file = new File(plugin.getDataFolder(), "Clans.yml");
         this.config = YamlConfiguration.loadConfiguration(file);
+        this.ownerUUID = String.valueOf(ownerUUID);
         loadClans();
     }
 
@@ -31,8 +33,8 @@ public class ClanManager {
         if (config.getConfigurationSection("clans") != null) {
             for (String clanName : config.getConfigurationSection("clans").getKeys(false)) {
                 String abkürzung = config.getString("clans." + clanName + ".abkürzung");
-                String ownerName = config.getString("clans." + clanName + ".ownerUUID");
-                Clan clan = new Clan(clanName, abkürzung, ownerName);
+                String ownerUUID = config.getString("clans." + clanName + ".ownerUUID");
+                Clan clan = new Clan(clanName, abkürzung, ownerUUID);
                 clans.put(clanName, clan);
 
                 // Lade Mitglieder
@@ -93,7 +95,7 @@ public class ClanManager {
         UUID ownerUUID = owner.getUniqueId();
 
         // Erstelle den Clan mit dem Besitzer und füge ihn als Mitglied hinzu
-        Clan newClan = new Clan(name, abkuerzung, ownerUUID);
+        Clan newClan = new Clan(name, abkuerzung, ownerName);
         clans.put(name, newClan);
         saveClans();
         return true;
@@ -161,6 +163,14 @@ public class ClanManager {
 
     public Clan getClan(String name) {
         return clans.get(name);
+    }
+    public Clan getClanOfPlayer(String playerName) {
+        for (Clan clan : clans.values()) {
+            if (clan.getMembers().contains(playerName)) {
+                return clan;
+            }
+        }
+        return null; // Spieler ist in keinem Clan
     }
 }
 
